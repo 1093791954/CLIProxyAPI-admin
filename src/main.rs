@@ -7,6 +7,7 @@ mod error;
 mod keygen;
 mod models;
 mod proxy;
+mod public_query_page;
 mod repository;
 mod state;
 mod static_assets;
@@ -47,6 +48,7 @@ async fn main() -> Result<(), AppError> {
 
     let app = Router::new()
         .route("/health", get(health))
+        .merge(public_query_page::router())
         .merge(admin_page::router().route_layer(admin_page_layer))
         .nest(
             "/admin/api",
