@@ -79,3 +79,15 @@ node dist/skill.js debugger enable
 node dist/skill.js hook generate fetch */admin/api/*
 node dist/skill.js hook-data
 ```
+
+## Release Startup Notes
+
+- Static assets are now embedded in the binary, so `/assets/style.css` works even when starting from `target/release`.
+- `.env` is still loaded from the current working directory only.
+
+Example:
+
+```bash
+cd D:\claude code Tools\CLIProxyAPI-admin
+target\release\CLIProxyAPI-admin.exe
+```

@@ -8,6 +8,7 @@ mod models;
 mod proxy;
 mod repository;
 mod state;
+mod static_assets;
 mod token_usage;
 
 use std::sync::Arc;
@@ -17,7 +18,7 @@ use config::AppConfig;
 use error::AppError;
 use repository::Repository;
 use state::AppState;
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing::info;
 
 #[tokio::main]
@@ -44,7 +45,7 @@ async fn main() -> Result<(), AppError> {
         .merge(admin_page::router())
         .nest("/admin/api", admin_api::router())
         .merge(proxy::router())
-        .nest_service("/assets", ServeDir::new("assets"))
+        .route("/assets/*path", get(static_assets::serve_asset))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
