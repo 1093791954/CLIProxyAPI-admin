@@ -445,10 +445,7 @@ mod tests {
         assert_eq!(updated.consumed_tokens, 10);
         assert_eq!(updated.status, "disabled");
 
-        let events = repo
-            .list_usage_events("k1", 20)
-            .await
-            .expect("list events");
+        let events = repo.list_usage_events("k1", 20).await.expect("list events");
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].total_tokens, 10);
     }

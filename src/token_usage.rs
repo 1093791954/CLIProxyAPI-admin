@@ -201,6 +201,9 @@ mod tests {
         let body = b"data: {\"id\":\"x\"}\n\ndata: {\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5},\"model\":\"m1\"}\n\ndata: [DONE]\n";
         let usage = extract_usage(body, Some("text/event-stream"));
         assert_eq!(usage.total_tokens, 5);
-        assert_eq!(extract_model_from_response(body, Some("text/event-stream")), Some("m1".to_string()));
+        assert_eq!(
+            extract_model_from_response(body, Some("text/event-stream")),
+            Some("m1".to_string())
+        );
     }
 }
