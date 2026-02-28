@@ -1,11 +1,11 @@
-use std::path::Path;
+use std::{fs::OpenOptions, path::Path};
 
 use sqlx::SqlitePool;
 
 use crate::error::AppError;
 
 pub async fn connect(database_url: &str) -> Result<SqlitePool, AppError> {
-    ensure_sqlite_parent(database_url)?;
+    ensure_sqlite_file_ready(database_url)?;
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(8)
         .connect(database_url)
@@ -14,23 +14,65 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool, AppError> {
     Ok(pool)
 }
 
-fn ensure_sqlite_parent(database_url: &str) -> Result<(), AppError> {
+fn ensure_sqlite_file_ready(database_url: &str) -> Result<(), AppError> {
     let trimmed = database_url.trim();
-    if !trimmed.starts_with("sqlite://") {
+    if !trimmed.starts_with("sqlite:") {
         return Ok(());
     }
-    let path = trimmed.trim_start_matches("sqlite://");
-    let path = path.trim_start_matches('/');
+
+    // Supports sqlite://path, sqlite:///abs/path and sqlite:path formats.
+    let raw_path = if let Some(v) = trimmed.strip_prefix("sqlite://") {
+        v
+    } else if let Some(v) = trimmed.strip_prefix("sqlite:") {
+        v
+    } else {
+        return Ok(());
+    };
+
+    let raw_path = raw_path
+        .split('?')
+        .next()
+        .unwrap_or(raw_path)
+        .split('#')
+        .next()
+        .unwrap_or(raw_path);
+
+    if raw_path == ":memory:" {
+        return Ok(());
+    }
+
+    // Handle sqlite:///C:/... style absolute path on Windows.
+    let path = if raw_path.starts_with('/') && raw_path.len() >= 3 && raw_path.as_bytes()[2] == b':'
+    {
+        &raw_path[1..]
+    } else {
+        raw_path
+    };
+
     if path.is_empty() {
         return Ok(());
     }
-    if let Some(parent) = Path::new(path).parent() {
+
+    let db_path = Path::new(path);
+    if let Some(parent) = db_path.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 AppError::internal(format!("failed to create database dir {parent:?}: {e}"))
             })?;
         }
     }
+
+    if !db_path.exists() {
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(db_path)
+            .map_err(|e| {
+                AppError::internal(format!("failed to create database file {db_path:?}: {e}"))
+            })?;
+    }
+
     Ok(())
 }
 
