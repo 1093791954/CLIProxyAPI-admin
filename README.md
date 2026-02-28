@@ -23,6 +23,8 @@ BIND_ADDR=127.0.0.1:8318
 DATABASE_URL=sqlite://./data/admin.db
 UPSTREAM_BASE_URL=http://localhost:8317
 UPSTREAM_BEARER_KEY=replace-with-your-upstream-key
+ADMIN_USERNAME=adminops
+ADMIN_PASSWORD=ChangeMe_To_A_Strong_2026!
 RUST_LOG=info
 ```
 
@@ -91,3 +93,10 @@ Example:
 cd D:\claude code Tools\CLIProxyAPI-admin
 target\release\CLIProxyAPI-admin.exe
 ```
+
+## Admin Basic Auth
+
+- `/admin` and `/admin/api/*` now require HTTP Basic authentication.
+- Credentials come from `.env`: `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
+- Startup will fail if username/password are missing or weak.
+- `/health` remains public for health checks.

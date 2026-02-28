@@ -1,4 +1,5 @@
 mod admin_api;
+mod admin_auth;
 mod admin_page;
 mod config;
 mod db;
@@ -13,7 +14,7 @@ mod token_usage;
 
 use std::sync::Arc;
 
-use axum::{Router, routing::get};
+use axum::{Router, middleware, routing::get};
 use config::AppConfig;
 use error::AppError;
 use repository::Repository;
@@ -39,11 +40,18 @@ async fn main() -> Result<(), AppError> {
         repo,
         http_client,
     };
+    let admin_page_layer =
+        middleware::from_fn_with_state(state.clone(), admin_auth::require_basic_auth);
+    let admin_api_layer =
+        middleware::from_fn_with_state(state.clone(), admin_auth::require_basic_auth);
 
     let app = Router::new()
         .route("/health", get(health))
-        .merge(admin_page::router())
-        .nest("/admin/api", admin_api::router())
+        .merge(admin_page::router().route_layer(admin_page_layer))
+        .nest(
+            "/admin/api",
+            admin_api::router().route_layer(admin_api_layer),
+        )
         .merge(proxy::router())
         .route("/assets/*path", get(static_assets::serve_asset))
         .layer(TraceLayer::new_for_http())
