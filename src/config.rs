@@ -12,6 +12,7 @@ pub struct AppConfig {
     pub database_url: String,
     pub upstream_base_url: String,
     pub upstream_bearer_key: String,
+    pub public_notice_file: Option<String>,
     pub admin_username: String,
     pub admin_password: String,
 }
@@ -34,6 +35,10 @@ impl AppConfig {
         let admin_password = env::var("ADMIN_PASSWORD").map_err(|_| {
             AppError::config("missing env ADMIN_PASSWORD. set it in .env or process environment")
         })?;
+        let public_notice_file = env::var("PUBLIC_NOTICE_FILE")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
 
         let upstream_bearer_key = upstream_bearer_key.trim().to_string();
         let admin_username = admin_username.trim().to_string();
@@ -56,6 +61,7 @@ impl AppConfig {
             database_url,
             upstream_base_url: upstream_base_url.trim_end_matches('/').to_string(),
             upstream_bearer_key,
+            public_notice_file,
             admin_username,
             admin_password,
         })

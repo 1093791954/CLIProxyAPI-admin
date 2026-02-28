@@ -41,6 +41,13 @@
       </div>
     </section>
     {% endif %}
+
+    {% if let Some(v) = notice_html %}
+    <section class="panel notice-panel">
+      <h2>公告</h2>
+      <div class="notice-content">{{ v|safe }}</div>
+    </section>
+    {% endif %}
   </main>
 </body>
 </html>

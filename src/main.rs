@@ -67,6 +67,7 @@ async fn main() -> Result<(), AppError> {
         bind_addr = %config.bind_addr,
         upstream = %config.upstream_base_url,
         database = %config.database_url,
+        notice_file = config.public_notice_file.as_deref().unwrap_or(""),
         "CLIProxyAPI-admin started"
     );
 

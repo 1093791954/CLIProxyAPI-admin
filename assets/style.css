@@ -388,6 +388,68 @@ code {
   margin-top: 4px;
 }
 
+.notice-panel {
+  background: linear-gradient(160deg, #ffffff, #f5f9ff);
+}
+
+.notice-content {
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.notice-content > :first-child {
+  margin-top: 0;
+}
+
+.notice-content > :last-child {
+  margin-bottom: 0;
+}
+
+.notice-content h1,
+.notice-content h2,
+.notice-content h3,
+.notice-content h4 {
+  margin-top: 1.2em;
+  margin-bottom: 0.45em;
+}
+
+.notice-content p,
+.notice-content ul,
+.notice-content ol,
+.notice-content blockquote,
+.notice-content pre {
+  margin: 0.55em 0;
+}
+
+.notice-content ul,
+.notice-content ol {
+  padding-left: 1.3em;
+}
+
+.notice-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.notice-content code {
+  margin-top: 0;
+}
+
+.notice-content pre {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f7fbff;
+  overflow-x: auto;
+}
+
+.notice-content pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
