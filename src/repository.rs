@@ -46,7 +46,8 @@ impl Repository {
         .bind(now)
         .bind(now)
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(map_create_key_insert_error)?;
 
         self.get_key_by_id(id).await
     }
@@ -411,6 +412,21 @@ fn now_ts() -> i64 {
     Utc::now().timestamp()
 }
 
+fn map_create_key_insert_error(error: sqlx::Error) -> AppError {
+    if let sqlx::Error::Database(db_error) = &error {
+        if db_error.is_unique_violation() {
+            let message = db_error.message().to_ascii_lowercase();
+            if message.contains("api_keys.api_key") || message.contains("api_key") {
+                return AppError::bad_request("api_key already exists");
+            }
+            if message.contains("api_keys.id") || message.contains("id") {
+                return AppError::internal("key id collision, please retry create key");
+            }
+        }
+    }
+    AppError::from(error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,5 +464,24 @@ mod tests {
         let events = repo.list_usage_events("k1", 20).await.expect("list events");
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].total_tokens, 10);
+    }
+
+    #[tokio::test]
+    async fn duplicate_api_key_returns_bad_request() {
+        let pool = crate::db::connect("sqlite::memory:")
+            .await
+            .expect("connect in-memory sqlite");
+        let repo = Repository::new(pool);
+
+        repo.create_key("k1", "a", "sk-duplicate-123", 10, None)
+            .await
+            .expect("create first key");
+        let err = repo
+            .create_key("k2", "b", "sk-duplicate-123", 10, None)
+            .await
+            .expect_err("duplicate key should fail");
+
+        assert!(matches!(err, AppError::BadRequest(_)));
+        assert!(err.to_string().contains("api_key already exists"));
     }
 }

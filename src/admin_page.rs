@@ -8,6 +8,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
+    error::AppError,
     keygen,
     models::{
         ApiKeyDto, CreateKeyForm, CreateKeyRequest, ListFilter, ListKeysQuery, PatchKeyRequest,
@@ -131,6 +132,7 @@ async fn create_action(
 ) -> impl IntoResponse {
     let req = CreateKeyRequest {
         name: form.name.trim().to_string(),
+        api_key: form.api_key.clone(),
         token_limit: form.token_limit,
         notes: form.notes.clone(),
     };
@@ -139,7 +141,11 @@ async fn create_action(
     }
 
     let id = keygen::new_key_id();
-    let api_key = keygen::new_api_key();
+    let api_key = match keygen::resolve_api_key(req.api_key.as_deref()) {
+        Ok(v) => v,
+        Err(AppError::BadRequest(_)) => return Redirect::to("/admin?err=invalid_api_key"),
+        Err(_) => return Redirect::to("/admin?err=create_failed"),
+    };
     match state
         .repo
         .create_key(
@@ -151,7 +157,17 @@ async fn create_action(
         )
         .await
     {
-        Ok(_) => Redirect::to(&format!("/admin?msg=created&new_key={api_key}")),
+        Ok(_) => {
+            let encoded_api_key = encode_query_component(&api_key);
+            Redirect::to(&format!("/admin?msg=created&new_key={encoded_api_key}"))
+        }
+        Err(AppError::BadRequest(message))
+            if message
+                .to_ascii_lowercase()
+                .contains("api_key already exists") =>
+        {
+            Redirect::to("/admin?err=api_key_already_exists")
+        }
         Err(_) => Redirect::to("/admin?err=create_failed"),
     }
 }
@@ -202,4 +218,17 @@ async fn delete_action(State(state): State<AppState>, Path(id): Path<String>) ->
         Ok(_) => Redirect::to("/admin?msg=deleted"),
         Err(_) => Redirect::to("/admin?err=delete_failed"),
     }
+}
+
+fn encode_query_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            use std::fmt::Write as _;
+            let _ = write!(&mut encoded, "%{byte:02X}");
+        }
+    }
+    encoded
 }

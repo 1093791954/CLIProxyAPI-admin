@@ -39,7 +39,7 @@ async fn create_key(
     }
 
     let id = keygen::new_key_id();
-    let api_key = keygen::new_api_key();
+    let api_key = keygen::resolve_api_key(payload.api_key.as_deref())?;
     let row = state
         .repo
         .create_key(

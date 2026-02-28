@@ -88,6 +88,7 @@ impl TokenUsage {
 #[derive(Debug, Deserialize)]
 pub struct CreateKeyRequest {
     pub name: String,
+    pub api_key: Option<String>,
     pub token_limit: i64,
     pub notes: Option<String>,
 }
@@ -216,6 +217,7 @@ impl From<UsageEventRecord> for UsageEventDto {
 #[derive(Debug, Deserialize)]
 pub struct CreateKeyForm {
     pub name: String,
+    pub api_key: Option<String>,
     pub token_limit: i64,
     pub notes: Option<String>,
 }
