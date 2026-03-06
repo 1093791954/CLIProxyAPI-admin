@@ -28,7 +28,9 @@ npm start
 Pages:
 
 - Public check page: `/check`
-- Admin login page: `/admin/login`
+- Admin entry page: `/admin`
+- Admin dashboard page: `/admin/dashboard`
+- Admin login compatibility page: `/admin/login`
 
 ## Important Env
 

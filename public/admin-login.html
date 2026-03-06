@@ -30,13 +30,20 @@
   </div>
 
   <script>
-    const { createApp, reactive, ref } = Vue;
+    const { createApp, onMounted, reactive, ref } = Vue;
 
     createApp({
       setup() {
         const loading = ref(false);
         const error = ref('');
         const form = reactive({ accessKey: '' });
+
+        onMounted(() => {
+          const token = localStorage.getItem('cliproxy_admin_token');
+          if (token) {
+            location.replace('/admin/dashboard');
+          }
+        });
 
         async function submit() {
           loading.value = true;
@@ -52,7 +59,7 @@
             if (!data.accessToken) throw new Error('登录返回异常');
 
             localStorage.setItem('cliproxy_admin_token', data.accessToken);
-            location.href = '/admin';
+            location.replace('/admin/dashboard');
           } catch (e) {
             error.value = e.message || '登录失败';
           } finally {

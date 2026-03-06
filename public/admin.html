@@ -48,7 +48,6 @@
             <option value="active">启用</option>
             <option value="disabled">禁用</option>
             <option value="exhausted">已耗尽</option>
-            <option value="deleted">已删除</option>
           </select>
         </label>
         <div style="display:flex; align-items:flex-end; gap:8px;">
@@ -164,7 +163,7 @@
       setup() {
         const token = localStorage.getItem('cliproxy_admin_token');
         if (!token) {
-          location.href = '/admin/login';
+          location.href = '/admin';
         }
 
         const error = ref('');
@@ -247,6 +246,7 @@
 
         async function api(path, options = {}) {
           const res = await fetch(path, {
+            cache: 'no-store',
             ...options,
             headers: {
               'Content-Type': 'application/json',
@@ -258,7 +258,7 @@
           if (!res.ok) {
             if (res.status === 401) {
               localStorage.removeItem('cliproxy_admin_token');
-              location.href = '/admin/login';
+              location.href = '/admin';
               return;
             }
             throw new Error(data.error || '请求失败');
@@ -344,6 +344,8 @@
           message.value = '';
           try {
             await api(`/api/admin/keys/${item.id}`, { method: 'DELETE' });
+            keys.value = keys.value.filter((current) => current.id !== item.id);
+            pagination.total = Math.max(0, Number(pagination.total || 0) - 1);
             message.value = '删除成功';
             await loadKeys();
           } catch (e) {
@@ -402,7 +404,7 @@
 
         function logout() {
           localStorage.removeItem('cliproxy_admin_token');
-          location.href = '/admin/login';
+          location.href = '/admin';
         }
 
         onMounted(refreshAll);

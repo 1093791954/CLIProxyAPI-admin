@@ -111,6 +111,7 @@ async function getRemoteSetSafe() {
 export async function getKeyById(id) {
   const row = await getByIdRaw(id);
   if (!row) return null;
+  if (normalizeStatus(row.status) === 'deleted') return null;
   try {
     const remoteSet = await getRemoteSetSafe();
     return mapRow(row, remoteSet);
@@ -128,8 +129,20 @@ export async function listKeys({ page = 1, pageSize = 20, status = '', keyword =
   const params = [];
 
   if (status) {
+    const normalizedStatus = normalizeStatus(status);
+    if (normalizedStatus === 'deleted') {
+      return {
+        items: [],
+        page: safePage,
+        pageSize: safePageSize,
+        total: 0,
+        remoteReachable: true
+      };
+    }
     where.push('status = ?');
-    params.push(normalizeStatus(status));
+    params.push(normalizedStatus);
+  } else {
+    where.push(`status != 'deleted'`);
   }
 
   if (keyword) {
@@ -442,37 +455,24 @@ export async function deleteKey({ id }) {
       throw error;
     }
 
-    if (normalizeStatus(existing.status) === 'deleted') {
-      return mapRow(existing, null);
-    }
-
     const remoteKeys = await getApiKeys();
-    const remoteSet = new Set(remoteKeys);
-    if (remoteSet.has(existing.key_plaintext)) {
+    if (remoteKeys.includes(existing.key_plaintext)) {
       removeKeyInArray(remoteKeys, existing.key_plaintext);
       await replaceApiKeys(remoteKeys);
-      remoteSet.delete(existing.key_plaintext);
     }
 
-    const now = nowIso();
-    await db.run(
-      `UPDATE api_keys
-         SET status = 'deleted',
-             updated_at = ?,
-             deleted_at = ?,
-             remote_exists = 0,
-             sync_status = 'deleted'
-       WHERE id = ?`,
-      [now, now, id]
-    );
+    await db.run(`DELETE FROM api_keys WHERE id = ?`, [id]);
 
-    const row = await getByIdRaw(id);
-    return mapRow(row, remoteSet);
+    return {
+      ok: true,
+      id,
+      keyPlaintext: existing.key_plaintext
+    };
   });
 }
 
 export async function findKeyByPlaintext(key) {
-  const row = await db.get(`SELECT * FROM api_keys WHERE key_plaintext = ?`, [key]);
+  const row = await db.get(`SELECT * FROM api_keys WHERE key_plaintext = ? AND status != 'deleted'`, [key]);
   return mapRow(row, null);
 }
 
