@@ -3,30 +3,94 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CLIProxy Key 管理后台登录</title>
+  <title>CLIProxy 管理后台登录</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body>
-  <div id="app" class="page-wrap" style="max-width:560px; padding-top:56px;">
-    <div class="card">
-      <h1>CLIProxy Key 管理后台</h1>
-      <p class="small">使用管理秘钥登录</p>
+  <div id="app" class="page-wrap page-login">
+    <main class="login-layout">
+      <section class="surface login-copy">
+        <div class="brand-wrap">
+          <div class="brand-mark">CP</div>
+          <div class="brand-text">
+            <p class="brand-kicker">CLIProxy / Admin</p>
+            <h1 class="brand-title">管理后台登录</h1>
+          </div>
+        </div>
 
-      <div v-if="error" class="notice error" style="margin-bottom:12px;">{{ error }}</div>
+        <div class="stack-md">
+          <p class="eyebrow">Operations First</p>
+          <h2 class="hero-title">更像工作台，更少像宣传页。</h2>
+          <p class="hero-subtitle">
+            登录后直接进入 Key 管理、公告发布和审计回溯。当前界面优先考虑操作效率、状态清晰度和桌面端可读性。
+          </p>
+        </div>
 
-      <div class="grid" style="margin-top:12px;">
-        <label>
-          管理秘钥
-          <input v-model="form.accessKey" type="password" placeholder="请输入管理秘钥" @keyup.enter="submit" />
-        </label>
-      </div>
+        <div class="login-stats">
+          <article class="metric-card">
+            <div class="metric-label">Key 管理</div>
+            <div class="metric-value">创建 / 禁用 / 删除</div>
+            <div class="metric-note">进入后台后以表格为核心工作区。</div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">公告维护</div>
+            <div class="metric-value">版本化发布</div>
+            <div class="metric-note">公告创建和切换收纳在侧栏，不打断主操作流。</div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">审计回看</div>
+            <div class="metric-value">最近操作</div>
+            <div class="metric-note">快速定位 Key 与公告的关键变更记录。</div>
+          </article>
+        </div>
 
-      <div style="margin-top:16px; display:flex; gap:10px;">
-        <button class="btn-primary" @click="submit" :disabled="loading">{{ loading ? '登录中...' : '登录' }}</button>
-        <a class="btn-ghost" href="/check" style="text-decoration:none; display:inline-block;">前往查询页</a>
-      </div>
-    </div>
+        <div class="mini-points">
+          <div class="mini-point">
+            <strong>轻一点的玻璃，更重一点的可读性</strong>
+            <div class="soft-note">保留深色玻璃质感，但让输入框、按钮与状态信息成为页面真正的重心。</div>
+          </div>
+          <div class="mini-point">
+            <strong>单屏完成登录认知</strong>
+            <div class="soft-note">不再堆太多大段说明，避免用户视线先被海报式内容带走。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface surface-strong login-card stack-lg">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Secure Access</p>
+            <h2 class="section-title">输入管理秘钥</h2>
+            <p class="section-subtitle">成功后会跳转到 `/admin/dashboard`，如果本地已存在 token 会自动进入后台。</p>
+          </div>
+        </div>
+
+        <div v-if="error" class="notice error" role="alert">{{ error }}</div>
+
+        <form class="stack-md" @submit.prevent="submit">
+          <label class="field">
+            <span>管理秘钥</span>
+            <input
+              v-model="form.accessKey"
+              type="password"
+              placeholder="请输入管理秘钥"
+              autocomplete="current-password"
+              @keyup.enter="submit"
+            />
+          </label>
+
+          <div class="action-row">
+            <button class="btn-primary" type="submit" :disabled="loading">
+              {{ loading ? '登录中...' : '进入管理后台' }}
+            </button>
+            <a class="btn btn-ghost" href="/check">前往检查页面</a>
+          </div>
+        </form>
+
+        <div class="soft-note">建议只在受信环境中保存后台 token。如仅需核验 Key 状态，可直接使用 <a class="link-inline" href="/check">公共检查页</a>。</div>
+      </section>
+    </main>
   </div>
 
   <script>
@@ -46,22 +110,29 @@
         });
 
         async function submit() {
+          if (!form.accessKey) {
+            error.value = '请输入管理秘钥';
+            return;
+          }
+
           loading.value = true;
           error.value = '';
+
           try {
             const res = await fetch('/api/admin/auth/login', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(form)
             });
+
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || '登录失败');
-            if (!data.accessToken) throw new Error('登录返回异常');
+            if (!res.ok) throw new Error(data.error || '登录失败，请检查管理秘钥');
+            if (!data.accessToken) throw new Error('登录返回异常，未获取到访问令牌');
 
             localStorage.setItem('cliproxy_admin_token', data.accessToken);
             location.replace('/admin/dashboard');
           } catch (e) {
-            error.value = e.message || '登录失败';
+            error.value = e.message || '登录失败，请稍后重试';
           } finally {
             loading.value = false;
           }

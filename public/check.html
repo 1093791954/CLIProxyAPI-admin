@@ -3,47 +3,200 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CLIProxy Key 查询</title>
+  <title>CLIProxy Key 检查台</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
 </head>
 <body>
-  <div id="app" class="page-wrap" style="max-width:860px;">
-    <div class="card">
-      <h1>Key 状态与额度查询</h1>
-      <p class="small">输入 Key 查询存活状态、额度和公告。</p>
-
-      <div class="grid two" style="margin-top:10px;">
-        <input v-model.trim="keyInput" placeholder="请输入你的 Key" @keyup.enter="check" />
-        <button class="btn-primary" @click="check" :disabled="loading">{{ loading ? '查询中...' : '立即查询' }}</button>
+  <div id="app" class="page-wrap">
+    <header class="surface topbar">
+      <div class="brand-wrap">
+        <div class="brand-mark">CP</div>
+        <div class="brand-text">
+          <p class="brand-kicker">CLIProxy / Public Check</p>
+          <h1 class="brand-title">Key 检查台</h1>
+        </div>
       </div>
 
-      <div class="small" style="margin-top:10px;">系统已启用访问保护，频繁查询可能短时返回繁忙提示。</div>
-      <div v-if="error" class="notice error" style="margin-top:10px;">{{ error }}</div>
-    </div>
-
-    <div v-if="result" class="card">
-      <h2>查询结果</h2>
-      <div class="grid three">
-        <div><strong>存活:</strong> {{ result.alive ? '是' : '否' }}</div>
-        <div><strong>状态:</strong> <span class="badge" :class="result.status">{{ statusText(result.status) }}</span></div>
-        <div><strong>同步状态:</strong> {{ syncText(result.syncStatus) }}</div>
-        <div><strong>总额:</strong> {{ result.quotaUnlimited ? '不限额' : result.totalQuotaTokens }}</div>
-        <div><strong>已用:</strong> {{ result.usedTokens ?? '-' }}</div>
-        <div><strong>剩余:</strong> {{ result.quotaUnlimited ? '不限额' : result.remainingTokens }}</div>
-        <div><strong>到期时间:</strong> {{ result.expiresAt || '无' }}</div>
-        <div><strong>远端存在:</strong> {{ result.remoteExists ? '是' : '否' }}</div>
-        <div><strong>查询时间:</strong> {{ checkedAt }}</div>
+      <div class="action-row">
+        <a class="btn btn-ghost" href="/admin">后台登录</a>
       </div>
-    </div>
+    </header>
 
-    <div class="card" v-if="announcement">
-      <h2>公告：{{ announcement.title }}</h2>
-      <div class="announcement-md" v-html="renderAnnouncementMd(announcement.contentMd)"></div>
-      <div class="small announcement-meta">版本：V{{ announcement.version }} · 发布人：{{ announcement.createdBy || '-' }} · 发布时间：{{ formatDateTime(announcement.createdAt) }}</div>
-    </div>
+    <main class="stack-xl">
+      <section class="check-layout">
+        <article class="surface surface-strong check-entry stack-lg">
+          <div class="stack-md">
+            <p class="eyebrow">Key Inspector</p>
+            <h2 class="hero-title">快速核验 Key 状态、额度和同步情况。</h2>
+            <p class="hero-subtitle">
+              查询入口仍然使用原有 `/api/public/key/check`，但页面布局已经改成桌面端友好的双段式，不再像单列移动页放大版。
+            </p>
+          </div>
+
+          <div class="pill-row">
+            <span class="pill">存活状态</span>
+            <span class="pill">额度明细</span>
+            <span class="pill">同步状态</span>
+            <span class="pill">公告联动</span>
+          </div>
+
+          <form class="stack-md" @submit.prevent="check">
+            <label class="field">
+              <span>待检查 Key</span>
+              <div class="field-row">
+                <input
+                  v-model.trim="keyInput"
+                  placeholder="请输入要检查的 Key"
+                  autocomplete="off"
+                  spellcheck="false"
+                  @keyup.enter="check"
+                />
+                <button class="btn-primary" type="submit" :disabled="loading">
+                  {{ loading ? '检查中...' : '立即检查' }}
+                </button>
+              </div>
+            </label>
+          </form>
+
+          <div class="soft-note">公共查询接口带有限流保护；如果频繁请求，可能会收到忙碌或限流提示。</div>
+
+          <div v-if="noticeText" class="notice" :class="{ error: noticeTone === 'error', success: noticeTone === 'success' }" :role="noticeTone === 'error' ? 'alert' : 'status'">
+            {{ noticeText }}
+          </div>
+        </article>
+
+        <aside class="surface side-panel stack-md">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">Quick Guide</p>
+              <h2 class="section-title">使用说明</h2>
+              <p class="section-subtitle">这个页面更适合做快速核验，而不是长时间停留阅读。</p>
+            </div>
+          </div>
+
+          <div class="status-list">
+            <div class="status-item">
+              <span class="label">推荐用途</span>
+              <span class="value">查存活 / 查额度</span>
+            </div>
+            <div class="status-item">
+              <span class="label">同步判断</span>
+              <span class="value">正常 / 缺失 / 待同步</span>
+            </div>
+            <div class="status-item">
+              <span class="label">鉴权头</span>
+              <span class="value mono">Bearer &lt;YOUR_KEY&gt;</span>
+            </div>
+            <div class="status-item">
+              <span class="label">管理入口</span>
+              <span class="value"><a class="link-inline" href="/admin">/admin</a></span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section v-if="result" class="surface stack-lg">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Result Overview</p>
+            <h2 class="section-title">检查结果</h2>
+            <p class="section-subtitle">最近检查时间：{{ checkedAt || '-' }}</p>
+          </div>
+          <span class="badge" :class="result.status">{{ statusText(result.status) }}</span>
+        </div>
+
+        <div class="result-grid">
+          <article class="kpi-card">
+            <div class="kpi-label">存活状态</div>
+            <div class="kpi-value">{{ result.alive ? '在线' : '离线' }}</div>
+            <div class="kpi-note">本地状态正常且远端存在时才视为在线。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">同步状态</div>
+            <div class="kpi-value">{{ syncText(result.syncStatus) }}</div>
+            <div class="kpi-note">用于判断本地记录与远端情况是否一致。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">远端存在</div>
+            <div class="kpi-value">{{ result.remoteExists ? '是' : '否' }}</div>
+            <div class="kpi-note">缺失通常代表未同步、已禁用或已删除。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">状态标记</div>
+            <div class="kpi-value">{{ statusText(result.status) }}</div>
+            <div class="kpi-note">包括启用、禁用、已耗尽和不存在等状态。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">总额度</div>
+            <div class="kpi-value mono">{{ formatQuota(result.totalQuotaTokens, result.quotaUnlimited) }}</div>
+            <div class="kpi-note">如果是不限额 Key，会直接显示“不限额”。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">已使用</div>
+            <div class="kpi-value mono">{{ formatNumber(result.usedTokens) }}</div>
+            <div class="kpi-note">已累计消耗的 token 数量。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">剩余额度</div>
+            <div class="kpi-value mono">{{ formatQuota(result.remainingTokens, result.quotaUnlimited) }}</div>
+            <div class="kpi-note">额度受限时，这一项最适合快速判断风险。</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">到期时间</div>
+            <div class="kpi-value">{{ result.expiresAt ? formatDateTime(result.expiresAt) : '未设置' }}</div>
+            <div class="kpi-note">未设置表示不按时间自动过期。</div>
+          </article>
+        </div>
+      </section>
+
+      <div v-if="result || announcement" class="split-layout">
+        <section v-if="result && result.usageGuide" class="surface stack-md">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">Usage Guide</p>
+              <h2 class="section-title">接入方式</h2>
+              <p class="section-subtitle">接口返回的调用说明集中展示在这里，避免和结果卡混在一起。</p>
+            </div>
+          </div>
+
+          <div class="overview-grid">
+            <article class="metric-card">
+              <div class="metric-label">Base URL</div>
+              <div class="metric-value mono">{{ result.usageGuide.baseUrl }}</div>
+              <div class="metric-note">请求目标地址</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-label">Header Name</div>
+              <div class="metric-value mono">{{ result.usageGuide.headerName }}</div>
+              <div class="metric-note">请求头名称</div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-label">Header Format</div>
+              <div class="metric-value mono">{{ result.usageGuide.headerFormat }}</div>
+              <div class="metric-note">鉴权头格式</div>
+            </article>
+          </div>
+
+          <pre><code>{{ `${result.usageGuide.headerName}: ${result.usageGuide.headerFormat}` }}</code></pre>
+        </section>
+
+        <section v-if="announcement" class="surface stack-md">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">Current Announcement</p>
+              <h2 class="section-title">{{ displayAnnouncementTitle(announcement) }}</h2>
+              <p class="section-subtitle">版本 V{{ announcement.version }} · 发布人 {{ displayText(announcement.createdBy, '-') }}</p>
+            </div>
+          </div>
+
+          <div class="announcement-md" v-html="renderAnnouncementMd(announcement.contentMd)"></div>
+          <div class="small announcement-meta">发布时间：{{ formatDateTime(announcement.createdAt) }}</div>
+        </section>
+      </div>
+    </main>
   </div>
 
   <script>
@@ -53,10 +206,11 @@
       setup() {
         const keyInput = ref('');
         const loading = ref(false);
-        const error = ref('');
         const result = ref(null);
         const announcement = ref(null);
         const checkedAt = ref('');
+        const noticeText = ref('');
+        const noticeTone = ref('');
 
         const statusMap = {
           active: '启用',
@@ -74,6 +228,23 @@
           deleted: '已删除',
           pending: '待同步'
         };
+
+        function isProbablyCorrupted(value) {
+          const text = String(value || '').trim();
+          if (!text) return false;
+          return /�/.test(text) || (text.match(/\?/g) || []).length >= 3;
+        }
+
+        function displayText(value, fallback = '未设置') {
+          const text = String(value || '').trim();
+          if (!text) return fallback;
+          if (isProbablyCorrupted(text)) return fallback;
+          return text;
+        }
+
+        function displayAnnouncementTitle(item) {
+          return displayText(item?.title, '公告标题待修复');
+        }
 
         function statusText(status) {
           return statusMap[status] || '未知';
@@ -102,9 +273,22 @@
           return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
         }
 
+        function formatNumber(value) {
+          const number = Number(value ?? 0);
+          if (!Number.isFinite(number)) return '-';
+          return new Intl.NumberFormat('zh-CN').format(number);
+        }
+
+        function formatQuota(value, unlimited) {
+          return unlimited ? '不限额' : formatNumber(value);
+        }
+
         function renderAnnouncementMd(md) {
           const source = String(md || '');
           if (!source.trim()) return '';
+          if (isProbablyCorrupted(source)) {
+            return '<p>当前公告内容存在编码异常，建议在后台重新发布一条新公告覆盖。</p>';
+          }
           const html = window.marked
             ? window.marked.parse(source, { gfm: true, breaks: true })
             : source;
@@ -112,10 +296,14 @@
         }
 
         async function check() {
-          error.value = '';
+          noticeText.value = '';
+          noticeTone.value = '';
           result.value = null;
+          announcement.value = null;
+
           if (!keyInput.value) {
-            error.value = '请输入 Key';
+            noticeText.value = '请输入要检查的 Key';
+            noticeTone.value = 'error';
             return;
           }
 
@@ -126,16 +314,27 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ key: keyInput.value })
             });
+
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              throw new Error(data.error || data.message || '查询失败');
+
+            if (!res.ok && data.status !== 'missing') {
+              throw new Error(data.error || data.message || '检查失败');
             }
 
             result.value = data;
             announcement.value = data.announcement || null;
             checkedAt.value = formatDateTime(new Date().toISOString());
+
+            if (res.ok) {
+              noticeText.value = '检查完成，结果已更新。';
+              noticeTone.value = 'success';
+            } else {
+              noticeText.value = data.message || '未找到对应 Key。';
+              noticeTone.value = 'error';
+            }
           } catch (e) {
-            error.value = e.message || '查询失败';
+            noticeText.value = e.message || '检查失败，请稍后再试';
+            noticeTone.value = 'error';
           } finally {
             loading.value = false;
           }
@@ -144,13 +343,18 @@
         return {
           keyInput,
           loading,
-          error,
           result,
-          checkedAt,
           announcement,
+          checkedAt,
+          noticeText,
+          noticeTone,
           statusText,
           syncText,
           formatDateTime,
+          formatNumber,
+          formatQuota,
+          displayText,
+          displayAnnouncementTitle,
           renderAnnouncementMd,
           check
         };

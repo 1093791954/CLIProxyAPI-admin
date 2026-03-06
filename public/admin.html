@@ -3,161 +3,314 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CLIProxy Key 管理台</title>
+  <title>CLIProxy 管理控制台</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body>
   <div id="app" class="page-wrap">
-    <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
-      <div>
-        <h1 style="margin-bottom:6px;">CLIProxy Key 管理台</h1>
-        <div class="small">创建、修改、删除 Key，统一管理额度、公告与审计日志。</div>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-ghost" @click="refreshAll">刷新</button>
-        <button class="btn-ghost" @click="logout">退出登录</button>
-      </div>
-    </div>
-
-    <div v-if="error" class="card notice error">{{ error }}</div>
-    <div v-if="message" class="card notice">{{ message }}</div>
-
-    <div class="card">
-      <h2>创建 Key</h2>
-      <div class="grid three">
-        <label>备注<input v-model.trim="createForm.remark" placeholder="例如：客户A-生产" /></label>
-        <label>总额度(Token)<input v-model.number="createForm.totalQuotaTokens" type="number" min="0" /></label>
-        <label>到期时间(可选)<input v-model="createForm.expiresAt" placeholder="2026-12-31T23:59:59Z" /></label>
-      </div>
-      <div class="grid three" style="margin-top:10px;">
-        <label>自定义 Key(留空自动生成)<input v-model.trim="createForm.keyPlaintext" placeholder="sk-..." /></label>
-      </div>
-      <div style="margin-top:12px;">
-        <button class="btn-primary" @click="createKey" :disabled="loading.create">{{ loading.create ? '创建中...' : '创建 Key' }}</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Key 列表</h2>
-      <div class="grid three" style="margin-bottom:10px;">
-        <label>关键词<input v-model.trim="query.keyword" placeholder="备注或 key" /></label>
-        <label>状态
-          <select v-model="query.status">
-            <option value="">全部</option>
-            <option value="active">启用</option>
-            <option value="disabled">禁用</option>
-            <option value="exhausted">已耗尽</option>
-          </select>
-        </label>
-        <div style="display:flex; align-items:flex-end; gap:8px;">
-          <button class="btn-ghost" @click="loadKeys">筛选</button>
+    <header class="surface topbar">
+      <div class="brand-wrap">
+        <div class="brand-mark">CP</div>
+        <div class="brand-text">
+          <p class="brand-kicker">CLIProxy / Dashboard</p>
+          <h1 class="brand-title">管理控制台</h1>
         </div>
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>状态</th>
-            <th>存活</th>
-            <th>Key</th>
-            <th>备注</th>
-            <th>总额/已用/剩余</th>
-            <th>到期</th>
-            <th>同步状态</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in keys" :key="item.id">
-            <td><span class="badge" :class="item.status">{{ statusText(item.status) }}</span></td>
-            <td>{{ item.alive ? '是' : '否' }}</td>
-            <td style="max-width:260px; word-break:break-all;"><input v-model.trim="item.keyPlaintext" /></td>
-            <td><input v-model.trim="item.remark" placeholder="备注" /></td>
-            <td>
-              <div><input v-model.number="item.totalQuotaTokens" type="number" min="0" /></div>
-              <div class="small">已用 {{ item.usedTokens }} | 剩余 {{ item.remainingTokens }}<span v-if="item.totalQuotaTokens <= 0">（不限额）</span></div>
-            </td>
-            <td><input v-model="item.expiresAt" placeholder="无" /></td>
-            <td style="max-width:120px; word-break:break-all;">{{ syncText(item.syncStatus) }}</td>
-            <td>
-              <div class="row-actions">
-                <button class="btn-ghost" @click="saveKey(item)">保存</button>
-                <button v-if="item.status === 'active'" class="btn-danger" @click="toggleKey(item, true)">禁用</button>
-                <button v-else-if="item.status === 'disabled'" class="btn-primary" @click="toggleKey(item, false)">启用</button>
-                <button class="btn-danger" @click="removeKey(item)">删除</button>
+      <div class="action-row">
+        <a class="btn btn-ghost" href="/check">检查页面</a>
+        <button class="btn-ghost" type="button" @click="refreshAll">刷新数据</button>
+        <button class="btn-ghost" type="button" @click="logout">退出登录</button>
+      </div>
+    </header>
+
+    <main class="stack-xl">
+      <section class="surface stack-md" style="padding:20px 22px;">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Operations Desk</p>
+            <h2 class="section-title">表格优先的 Key 管理工作台</h2>
+            <p class="section-subtitle">首屏优先展示筛选与列表；创建、公告和系统状态收进右侧，避免页面继续变成长卷文档。</p>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <article v-for="card in summaryCards" :key="card.label" class="metric-card">
+            <div class="metric-label">{{ card.label }}</div>
+            <div class="metric-value" :class="card.mono ? 'mono' : ''">{{ card.value }}</div>
+            <div class="metric-note">{{ card.note }}</div>
+          </article>
+        </div>
+      </section>
+
+      <div class="stack-md">
+        <div v-if="error" class="notice error" role="alert">{{ error }}</div>
+        <div v-if="message" class="notice success" role="status">{{ message }}</div>
+      </div>
+
+      <div class="dashboard-layout">
+        <main class="stack-xl">
+          <section class="surface table-panel stack-lg">
+            <div class="toolbar">
+              <div>
+                <p class="eyebrow">Key Inventory</p>
+                <h2 class="section-title">Key 列表</h2>
+                <p class="section-subtitle">桌面端优先围绕筛选、编辑与状态切换展开，不再让说明文案挤占首屏。</p>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="small" style="margin-top:10px;">共 {{ pagination.total }} 条，CLIProxy 连接：{{ remoteReachable ? '正常' : '异常' }}</div>
-    </div>
+              <div class="soft-note">当前列表共 {{ formatNumber(pagination.total) }} 条记录 · CLIProxy 远端连接 {{ remoteReachable ? '正常' : '异常' }}</div>
+            </div>
 
-    <div class="card">
-      <h2>公告管理</h2>
-      <div class="grid two">
-        <label>标题<input v-model.trim="announcementForm.title" /></label>
-        <div></div>
+            <div class="filters-row">
+              <label class="field">
+                <span>关键词</span>
+                <input v-model.trim="query.keyword" placeholder="备注或 Key" />
+              </label>
+              <label class="field">
+                <span>状态</span>
+                <select v-model="query.status">
+                  <option value="">全部</option>
+                  <option value="active">启用</option>
+                  <option value="disabled">禁用</option>
+                  <option value="exhausted">已耗尽</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>操作</span>
+                <button class="btn-ghost" type="button" @click="loadKeys">应用筛选</button>
+              </label>
+            </div>
+
+            <div v-if="keys.length" class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>状态</th>
+                    <th>存活</th>
+                    <th>Key</th>
+                    <th>备注</th>
+                    <th>配额</th>
+                    <th>到期时间</th>
+                    <th>同步</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in keys" :key="item.id">
+                    <td><span class="badge" :class="item.status">{{ statusText(item.status) }}</span></td>
+                    <td>
+                      <span class="badge" :class="item.alive ? 'ok' : 'missing'">{{ item.alive ? '在线' : '离线' }}</span>
+                    </td>
+                    <td>
+                      <div class="table-stack">
+                        <input v-model.trim="item.keyPlaintext" class="mono" />
+                        <div class="table-muted mono">{{ item.id }}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <input v-model.trim="item.remark" placeholder="备注" />
+                    </td>
+                    <td>
+                      <div class="table-stack">
+                        <input v-model.number="item.totalQuotaTokens" type="number" min="0" />
+                        <div class="table-muted mono">
+                          已用 {{ formatNumber(item.usedTokens) }} · 剩余 {{ item.totalQuotaTokens <= 0 ? '不限额' : formatNumber(item.remainingTokens) }}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="table-stack">
+                        <input v-model="item.expiresAt" placeholder="留空表示不设置" />
+                        <div class="table-muted">{{ item.expiresAt ? formatDateTime(item.expiresAt) : '未设置' }}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="table-stack">
+                        <span class="badge" :class="item.syncStatus || 'pending'">{{ syncText(item.syncStatus) }}</span>
+                        <div class="table-muted">远端 {{ item.remoteExists ? '存在' : '缺失' }}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="row-actions">
+                        <button class="btn-ghost" type="button" @click="copyKey(item.keyPlaintext)">复制</button>
+                        <button class="btn-ghost" type="button" @click="saveKey(item)">保存</button>
+                        <button v-if="item.status === 'active'" class="btn-danger" type="button" @click="toggleKey(item, true)">禁用</button>
+                        <button v-else-if="item.status === 'disabled'" class="btn-primary" type="button" @click="toggleKey(item, false)">启用</button>
+                        <button class="btn-danger" type="button" @click="removeKey(item)">删除</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-else class="empty-state">当前筛选条件下没有 Key 记录。</div>
+          </section>
+
+          <section class="surface audit-panel stack-lg">
+            <div class="toolbar">
+              <div>
+                <p class="eyebrow">Audit Timeline</p>
+                <h2 class="section-title">最近审计日志</h2>
+                <p class="section-subtitle">只保留一个固定高度的滚动区域，避免审计日志把整页拉成超长瀑布。</p>
+              </div>
+              <div class="soft-note">默认展示最近 100 条记录</div>
+            </div>
+
+            <div v-if="auditLogs.length" class="table-wrap panel-scroll audit-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>操作者</th>
+                    <th>动作</th>
+                    <th>目标 Key ID</th>
+                    <th>载荷</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="log in auditLogs" :key="log.id">
+                    <td>{{ formatDateTime(log.createdAt) }}</td>
+                    <td>{{ displayText(log.actor, '-') }}</td>
+                    <td>{{ actionText(log.action) }}</td>
+                    <td class="mono">{{ displayText(log.targetKeyId, '-') }}</td>
+                    <td><pre class="payload-block">{{ prettyPayload(log.payloadJson) }}</pre></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-else class="empty-state">还没有审计日志。</div>
+          </section>
+        </main>
+
+        <aside class="stack-xl">
+          <section class="surface side-panel stack-md">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Create Key</p>
+                <h2 class="section-title">创建新 Key</h2>
+                <p class="section-subtitle">创建逻辑保持不变，但表单收敛为辅助模块，不再压过主列表。</p>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>备注</span>
+              <input v-model.trim="createForm.remark" placeholder="例如：客户 A / 生产环境" />
+            </label>
+            <label class="field">
+              <span>总额度（Token）</span>
+              <input v-model.number="createForm.totalQuotaTokens" type="number" min="0" />
+            </label>
+            <label class="field">
+              <span>到期时间（可选）</span>
+              <input v-model="createForm.expiresAt" placeholder="2026-12-31T23:59:59Z" />
+            </label>
+            <label class="field">
+              <span>自定义 Key（留空自动生成）</span>
+              <input v-model.trim="createForm.keyPlaintext" class="mono" placeholder="sk-..." />
+            </label>
+
+            <div class="action-row">
+              <button class="btn-primary" type="button" @click="createKey" :disabled="loading.create">
+                {{ loading.create ? '创建中...' : '创建 Key' }}
+              </button>
+            </div>
+          </section>
+
+          <section class="surface side-panel stack-md">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">System Pulse</p>
+                <h2 class="section-title">系统概览</h2>
+                <p class="section-subtitle">把运行态信息压缩成短信息块，避免右侧再次变成说明墙。</p>
+              </div>
+            </div>
+
+            <div class="status-list">
+              <div class="status-item">
+                <span class="label">远端连接</span>
+                <span class="value">{{ remoteReachable ? '正常' : '异常' }}</span>
+              </div>
+              <div class="status-item">
+                <span class="label">当前公告</span>
+                <span class="value">{{ currentAnnouncement ? `V${currentAnnouncement.version}` : '未发布' }}</span>
+              </div>
+              <div class="status-item">
+                <span class="label">最近审计动作</span>
+                <span class="value">{{ latestAuditAction }}</span>
+              </div>
+              <div class="status-item">
+                <span class="label">当前筛选</span>
+                <span class="value">{{ query.status ? statusText(query.status) : '全部状态' }}</span>
+              </div>
+            </div>
+
+            <div v-if="currentAnnouncement" class="metric-card">
+              <div class="metric-label">当前公告摘要</div>
+              <div class="metric-value">{{ displayAnnouncementTitle(currentAnnouncement) }}</div>
+              <div class="metric-note">{{ summarizeText(currentAnnouncement.contentMd, 120) }}</div>
+            </div>
+          </section>
+
+          <section class="surface side-panel stack-md">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Announcement Composer</p>
+                <h2 class="section-title">公告管理</h2>
+                <p class="section-subtitle">新建公告放在这里，主工作流保持围绕 Key 表格。</p>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>标题</span>
+              <input v-model.trim="announcementForm.title" placeholder="例如：系统更新通知" />
+            </label>
+            <label class="field">
+              <span>内容（Markdown 或纯文本）</span>
+              <textarea v-model="announcementForm.contentMd" placeholder="支持 Markdown"></textarea>
+            </label>
+
+            <div class="action-row">
+              <button class="btn-primary" type="button" @click="createAnnouncement">创建公告</button>
+            </div>
+          </section>
+
+          <section class="surface side-panel stack-md">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Announcement History</p>
+                <h2 class="section-title">公告版本</h2>
+                <p class="section-subtitle">历史版本放在固定高度滚动区中，不再把页面继续拉长。</p>
+              </div>
+            </div>
+
+            <div v-if="announcements.length" class="version-list panel-scroll history-scroll">
+              <article v-for="ann in announcements" :key="ann.id" class="version-card stack-sm">
+                <div class="toolbar">
+                  <div>
+                    <div class="metric-label">V{{ ann.version }}</div>
+                    <strong>{{ displayAnnouncementTitle(ann) }}</strong>
+                  </div>
+                  <span class="badge" :class="ann.isCurrent ? 'active' : 'info'">{{ ann.isCurrent ? '当前' : '历史' }}</span>
+                </div>
+                <div class="soft-note">{{ summarizeText(ann.contentMd, 92) }}</div>
+                <div class="small">创建人 {{ displayText(ann.createdBy, '-') }} · {{ formatDateTime(ann.createdAt) }}</div>
+                <div class="action-row" v-if="!ann.isCurrent">
+                  <button class="btn-ghost" type="button" @click="publishAnnouncement(ann)">设为当前</button>
+                </div>
+              </article>
+            </div>
+
+            <div v-else class="empty-state">当前还没有公告记录。</div>
+          </section>
+        </aside>
       </div>
-      <label>内容（Markdown 或纯文本）
-        <textarea v-model="announcementForm.contentMd"></textarea>
-      </label>
-      <div style="margin-top:10px;">
-        <button class="btn-primary" @click="createAnnouncement">创建公告</button>
-      </div>
-
-      <table style="margin-top:12px;">
-        <thead>
-          <tr>
-            <th>版本</th>
-            <th>标题</th>
-            <th>创建人</th>
-            <th>状态</th>
-            <th>创建时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="ann in announcements" :key="ann.id">
-            <td>V{{ ann.version }}</td>
-            <td>{{ ann.title }}</td>
-            <td>{{ ann.createdBy }}</td>
-            <td>{{ ann.isCurrent ? '已发布' : '历史' }}</td>
-            <td>{{ formatDateTime(ann.createdAt) }}</td>
-            <td><button v-if="!ann.isCurrent" class="btn-ghost" @click="publishAnnouncement(ann)">设为当前</button></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h2>审计日志</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>时间</th>
-            <th>操作者</th>
-            <th>动作</th>
-            <th>目标 Key ID</th>
-            <th>载荷</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="log in auditLogs" :key="log.id">
-            <td>{{ log.createdAt }}</td>
-            <td>{{ log.actor }}</td>
-            <td>{{ actionText(log.action) }}</td>
-            <td>{{ log.targetKeyId || '-' }}</td>
-            <td style="max-width: 380px; word-break: break-all;">{{ log.payloadJson }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    </main>
   </div>
 
   <script>
-    const { createApp, reactive, ref, onMounted } = Vue;
+    const { createApp, reactive, ref, onMounted, computed } = Vue;
 
     createApp({
       setup() {
@@ -180,7 +333,7 @@
           remark: '',
           totalQuotaTokens: 1000000,
           expiresAt: '',
-          keyPlaintext: '',
+          keyPlaintext: ''
         });
 
         const announcementForm = reactive({ title: '', contentMd: '' });
@@ -202,14 +355,6 @@
           pending: '待同步'
         };
 
-        function statusText(status) {
-          return statusMap[status] || '未知';
-        }
-
-        function syncText(syncStatus) {
-          return syncStatusMap[syncStatus] || '未知';
-        }
-
         const actionMap = {
           'key.create': '创建 Key',
           'key.update': '更新 Key',
@@ -220,10 +365,34 @@
           'announcement.publish': '发布公告'
         };
 
+        function isProbablyCorrupted(value) {
+          const text = String(value || '').trim();
+          if (!text) return false;
+          return /�/.test(text) || (text.match(/\?/g) || []).length >= 3;
+        }
+
+        function displayText(value, fallback = '未设置') {
+          const text = String(value || '').trim();
+          if (!text) return fallback;
+          if (isProbablyCorrupted(text)) return fallback;
+          return text;
+        }
+
+        function displayAnnouncementTitle(item) {
+          return displayText(item?.title, '历史公告（标题待修复）');
+        }
+
+        function statusText(status) {
+          return statusMap[status] || '未知';
+        }
+
+        function syncText(syncStatus) {
+          return syncStatusMap[syncStatus] || '未知';
+        }
+
         function actionText(action) {
           return actionMap[action] || '其他操作';
         }
-
 
         function formatDateTime(iso) {
           if (!iso) return '-';
@@ -243,6 +412,52 @@
           return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
         }
 
+        function formatNumber(value) {
+          const number = Number(value ?? 0);
+          if (!Number.isFinite(number)) return '-';
+          return new Intl.NumberFormat('zh-CN').format(number);
+        }
+
+        function summarizeText(value, max = 100) {
+          const text = String(value || '').replace(/[#>*`_-]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (!text) return '暂无内容';
+          if (isProbablyCorrupted(text)) return '历史公告内容存在编码异常，建议用新公告覆盖。';
+          if (text.length <= max) return text;
+          return `${text.slice(0, max)}…`;
+        }
+
+        function prettyPayload(payload) {
+          if (!payload) return '-';
+          try {
+            return JSON.stringify(JSON.parse(payload), null, 2);
+          } catch {
+            return String(payload);
+          }
+        }
+
+        async function copyText(value) {
+          const text = String(value || '').trim();
+          if (!text) throw new Error('没有可复制的内容');
+
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', 'readonly');
+          textarea.style.position = 'fixed';
+          textarea.style.top = '-9999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          const copied = document.execCommand('copy');
+          document.body.removeChild(textarea);
+
+          if (!copied) {
+            throw new Error('当前环境不支持一键复制');
+          }
+        }
 
         async function api(path, options = {}) {
           const res = await fetch(path, {
@@ -254,15 +469,18 @@
               ...(options.headers || {})
             }
           });
+
           const data = await res.json().catch(() => ({}));
+
           if (!res.ok) {
             if (res.status === 401) {
               localStorage.removeItem('cliproxy_admin_token');
               location.href = '/admin';
-              return;
+              return undefined;
             }
             throw new Error(data.error || '请求失败');
           }
+
           return data;
         }
 
@@ -271,10 +489,11 @@
             const params = new URLSearchParams();
             if (query.keyword) params.set('keyword', query.keyword);
             if (query.status) params.set('status', query.status);
+
             const data = await api(`/api/admin/keys?${params.toString()}`);
-            keys.value = data.items || [];
-            pagination.total = data.total || 0;
-            remoteReachable.value = data.remoteReachable !== false;
+            keys.value = Array.isArray(data?.items) ? data.items : [];
+            pagination.total = data?.total || 0;
+            remoteReachable.value = data?.remoteReachable !== false;
           } catch (e) {
             error.value = e.message;
           }
@@ -284,19 +503,23 @@
           loading.create = true;
           error.value = '';
           message.value = '';
+
           try {
             const payload = {
               remark: createForm.remark,
               totalQuotaTokens: createForm.totalQuotaTokens,
               expiresAt: createForm.expiresAt || null,
-              keyPlaintext: createForm.keyPlaintext || '',
+              keyPlaintext: createForm.keyPlaintext || ''
             };
+
             const data = await api('/api/admin/keys', {
               method: 'POST',
               body: JSON.stringify(payload)
             });
+
             message.value = `创建成功：${data.keyPlaintext}`;
             createForm.remark = '';
+            createForm.expiresAt = '';
             createForm.keyPlaintext = '';
             await loadKeys();
           } catch (e) {
@@ -309,6 +532,7 @@
         async function saveKey(item) {
           error.value = '';
           message.value = '';
+
           try {
             await api(`/api/admin/keys/${item.id}`, {
               method: 'PATCH',
@@ -329,8 +553,12 @@
         async function toggleKey(item, disabled) {
           error.value = '';
           message.value = '';
+
           try {
-            await api(`/api/admin/keys/${item.id}/${disabled ? 'disable' : 'enable'}`, { method: 'POST', body: '{}' });
+            await api(`/api/admin/keys/${item.id}/${disabled ? 'disable' : 'enable'}`, {
+              method: 'POST',
+              body: '{}'
+            });
             message.value = disabled ? '已禁用' : '已启用';
             await loadKeys();
           } catch (e) {
@@ -339,9 +567,11 @@
         }
 
         async function removeKey(item) {
-          if (!confirm(`确认删除 Key: ${item.keyPlaintext} ?`)) return;
+          if (!confirm(`确认删除 Key：${item.keyPlaintext}？`)) return;
+
           error.value = '';
           message.value = '';
+
           try {
             await api(`/api/admin/keys/${item.id}`, { method: 'DELETE' });
             keys.value = keys.value.filter((current) => current.id !== item.id);
@@ -353,21 +583,41 @@
           }
         }
 
+        async function copyKey(value) {
+          error.value = '';
+          message.value = '';
+
+          try {
+            await copyText(value);
+            message.value = 'Key 已复制到剪贴板';
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
         async function loadAnnouncements() {
-          announcements.value = await api('/api/admin/announcements');
+          try {
+            const data = await api('/api/admin/announcements');
+            announcements.value = Array.isArray(data) ? data : [];
+          } catch (e) {
+            error.value = e.message;
+          }
         }
 
         async function createAnnouncement() {
           error.value = '';
           message.value = '';
+
           try {
             if (!announcementForm.title || !announcementForm.contentMd) {
               throw new Error('请输入标题和内容');
             }
+
             await api('/api/admin/announcements', {
               method: 'POST',
               body: JSON.stringify(announcementForm)
             });
+
             message.value = '公告创建成功';
             announcementForm.title = '';
             announcementForm.contentMd = '';
@@ -380,6 +630,7 @@
         async function publishAnnouncement(item) {
           error.value = '';
           message.value = '';
+
           try {
             await api(`/api/admin/announcements/${item.id}/publish`, {
               method: 'POST',
@@ -393,7 +644,12 @@
         }
 
         async function loadAuditLogs() {
-          auditLogs.value = await api('/api/admin/audit?limit=100');
+          try {
+            const data = await api('/api/admin/audit?limit=100');
+            auditLogs.value = Array.isArray(data) ? data : [];
+          } catch (e) {
+            error.value = e.message;
+          }
         }
 
         async function refreshAll() {
@@ -406,6 +662,42 @@
           localStorage.removeItem('cliproxy_admin_token');
           location.href = '/admin';
         }
+
+        const currentAnnouncement = computed(() => announcements.value.find((item) => item.isCurrent) || null);
+
+        const latestAuditAction = computed(() => {
+          const first = auditLogs.value[0];
+          return first ? actionText(first.action) : '暂无';
+        });
+
+        const summaryCards = computed(() => {
+          const activeCount = keys.value.filter((item) => item.status === 'active').length;
+          const disabledCount = keys.value.filter((item) => item.status === 'disabled').length;
+          const exhaustedCount = keys.value.filter((item) => item.status === 'exhausted').length;
+
+          return [
+            {
+              label: '当前列表总数',
+              value: formatNumber(pagination.total),
+              note: '基于当前筛选结果统计'
+            },
+            {
+              label: '活跃 Key',
+              value: formatNumber(activeCount),
+              note: `禁用 ${formatNumber(disabledCount)} · 已耗尽 ${formatNumber(exhaustedCount)}`
+            },
+            {
+              label: '远端同步',
+              value: remoteReachable.value ? '正常' : '异常',
+              note: remoteReachable.value ? 'CLIProxy 管理接口可达' : '请检查远端管理接口状态'
+            },
+            {
+              label: '当前公告',
+              value: currentAnnouncement.value ? `V${currentAnnouncement.value.version}` : '未发布',
+              note: currentAnnouncement.value ? displayAnnouncementTitle(currentAnnouncement.value) : '暂未设定当前公告'
+            }
+          ];
+        });
 
         onMounted(refreshAll);
 
@@ -421,15 +713,24 @@
           remoteReachable,
           createForm,
           announcementForm,
+          currentAnnouncement,
+          latestAuditAction,
+          summaryCards,
           statusText,
           syncText,
           actionText,
           formatDateTime,
+          formatNumber,
+          displayText,
+          displayAnnouncementTitle,
+          summarizeText,
+          prettyPayload,
           loadKeys,
           createKey,
           saveKey,
           toggleKey,
           removeKey,
+          copyKey,
           createAnnouncement,
           publishAnnouncement,
           refreshAll,
