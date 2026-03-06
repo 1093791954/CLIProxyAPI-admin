@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLIProxy Key 管理台</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app" class="page-wrap">
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
+      <div>
+        <h1 style="margin-bottom:6px;">CLIProxy Key 管理台</h1>
+        <div class="small">创建、修改、删除 Key，统一管理额度、公告与审计日志。</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-ghost" @click="refreshAll">刷新</button>
+        <button class="btn-ghost" @click="logout">退出登录</button>
+      </div>
+    </div>
+
+    <div v-if="error" class="card notice error">{{ error }}</div>
+    <div v-if="message" class="card notice">{{ message }}</div>
+
+    <div class="card">
+      <h2>创建 Key</h2>
+      <div class="grid three">
+        <label>备注<input v-model.trim="createForm.remark" placeholder="例如：客户A-生产" /></label>
+        <label>总额度(Token)<input v-model.number="createForm.totalQuotaTokens" type="number" min="0" /></label>
+        <label>到期时间(可选)<input v-model="createForm.expiresAt" placeholder="2026-12-31T23:59:59Z" /></label>
+      </div>
+      <div class="grid three" style="margin-top:10px;">
+        <label>自定义 Key(留空自动生成)<input v-model.trim="createForm.keyPlaintext" placeholder="sk-..." /></label>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn-primary" @click="createKey" :disabled="loading.create">{{ loading.create ? '创建中...' : '创建 Key' }}</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Key 列表</h2>
+      <div class="grid three" style="margin-bottom:10px;">
+        <label>关键词<input v-model.trim="query.keyword" placeholder="备注或 key" /></label>
+        <label>状态
+          <select v-model="query.status">
+            <option value="">全部</option>
+            <option value="active">启用</option>
+            <option value="disabled">禁用</option>
+            <option value="exhausted">已耗尽</option>
+            <option value="deleted">已删除</option>
+          </select>
+        </label>
+        <div style="display:flex; align-items:flex-end; gap:8px;">
+          <button class="btn-ghost" @click="loadKeys">筛选</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>状态</th>
+            <th>存活</th>
+            <th>Key</th>
+            <th>备注</th>
+            <th>总额/已用/剩余</th>
+            <th>到期</th>
+            <th>同步状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in keys" :key="item.id">
+            <td><span class="badge" :class="item.status">{{ statusText(item.status) }}</span></td>
+            <td>{{ item.alive ? '是' : '否' }}</td>
+            <td style="max-width:260px; word-break:break-all;"><input v-model.trim="item.keyPlaintext" /></td>
+            <td><input v-model.trim="item.remark" placeholder="备注" /></td>
+            <td>
+              <div><input v-model.number="item.totalQuotaTokens" type="number" min="0" /></div>
+              <div class="small">已用 {{ item.usedTokens }} | 剩余 {{ item.remainingTokens }}<span v-if="item.totalQuotaTokens <= 0">（不限额）</span></div>
+            </td>
+            <td><input v-model="item.expiresAt" placeholder="无" /></td>
+            <td style="max-width:120px; word-break:break-all;">{{ syncText(item.syncStatus) }}</td>
+            <td>
+              <div class="row-actions">
+                <button class="btn-ghost" @click="saveKey(item)">保存</button>
+                <button v-if="item.status === 'active'" class="btn-danger" @click="toggleKey(item, true)">禁用</button>
+                <button v-else-if="item.status === 'disabled'" class="btn-primary" @click="toggleKey(item, false)">启用</button>
+                <button class="btn-danger" @click="removeKey(item)">删除</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="small" style="margin-top:10px;">共 {{ pagination.total }} 条，CLIProxy 连接：{{ remoteReachable ? '正常' : '异常' }}</div>
+    </div>
+
+    <div class="card">
+      <h2>公告管理</h2>
+      <div class="grid two">
+        <label>标题<input v-model.trim="announcementForm.title" /></label>
+        <div></div>
+      </div>
+      <label>内容（Markdown 或纯文本）
+        <textarea v-model="announcementForm.contentMd"></textarea>
+      </label>
+      <div style="margin-top:10px;">
+        <button class="btn-primary" @click="createAnnouncement">创建公告</button>
+      </div>
+
+      <table style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>版本</th>
+            <th>标题</th>
+            <th>创建人</th>
+            <th>状态</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="ann in announcements" :key="ann.id">
+            <td>V{{ ann.version }}</td>
+            <td>{{ ann.title }}</td>
+            <td>{{ ann.createdBy }}</td>
+            <td>{{ ann.isCurrent ? '已发布' : '历史' }}</td>
+            <td>{{ formatDateTime(ann.createdAt) }}</td>
+            <td><button v-if="!ann.isCurrent" class="btn-ghost" @click="publishAnnouncement(ann)">设为当前</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>审计日志</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>操作者</th>
+            <th>动作</th>
+            <th>目标 Key ID</th>
+            <th>载荷</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="log in auditLogs" :key="log.id">
+            <td>{{ log.createdAt }}</td>
+            <td>{{ log.actor }}</td>
+            <td>{{ actionText(log.action) }}</td>
+            <td>{{ log.targetKeyId || '-' }}</td>
+            <td style="max-width: 380px; word-break: break-all;">{{ log.payloadJson }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, reactive, ref, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        const token = localStorage.getItem('cliproxy_admin_token');
+        if (!token) {
+          location.href = '/admin/login';
+        }
+
+        const error = ref('');
+        const message = ref('');
+        const loading = reactive({ create: false });
+        const query = reactive({ keyword: '', status: '' });
+        const pagination = reactive({ total: 0 });
+        const keys = ref([]);
+        const announcements = ref([]);
+        const auditLogs = ref([]);
+        const remoteReachable = ref(true);
+
+        const createForm = reactive({
+          remark: '',
+          totalQuotaTokens: 1000000,
+          expiresAt: '',
+          keyPlaintext: '',
+        });
+
+        const announcementForm = reactive({ title: '', contentMd: '' });
+
+        const statusMap = {
+          active: '启用',
+          disabled: '禁用',
+          exhausted: '已耗尽',
+          deleted: '已删除',
+          missing: '不存在'
+        };
+
+        const syncStatusMap = {
+          ok: '正常',
+          missing_remote: '远端缺失',
+          disabled: '已禁用',
+          exhausted: '已耗尽',
+          deleted: '已删除',
+          pending: '待同步'
+        };
+
+        function statusText(status) {
+          return statusMap[status] || '未知';
+        }
+
+        function syncText(syncStatus) {
+          return syncStatusMap[syncStatus] || '未知';
+        }
+
+        const actionMap = {
+          'key.create': '创建 Key',
+          'key.update': '更新 Key',
+          'key.disable': '禁用 Key',
+          'key.enable': '启用 Key',
+          'key.delete': '删除 Key',
+          'announcement.create': '创建公告',
+          'announcement.publish': '发布公告'
+        };
+
+        function actionText(action) {
+          return actionMap[action] || '其他操作';
+        }
+
+
+        function formatDateTime(iso) {
+          if (!iso) return '-';
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return String(iso);
+          const parts = new Intl.DateTimeFormat('zh-CN', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).formatToParts(d);
+          const map = Object.fromEntries(parts.map((item) => [item.type, item.value]));
+          return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
+        }
+
+
+        async function api(path, options = {}) {
+          const res = await fetch(path, {
+            ...options,
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+              ...(options.headers || {})
+            }
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            if (res.status === 401) {
+              localStorage.removeItem('cliproxy_admin_token');
+              location.href = '/admin/login';
+              return;
+            }
+            throw new Error(data.error || '请求失败');
+          }
+          return data;
+        }
+
+        async function loadKeys() {
+          try {
+            const params = new URLSearchParams();
+            if (query.keyword) params.set('keyword', query.keyword);
+            if (query.status) params.set('status', query.status);
+            const data = await api(`/api/admin/keys?${params.toString()}`);
+            keys.value = data.items || [];
+            pagination.total = data.total || 0;
+            remoteReachable.value = data.remoteReachable !== false;
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
+        async function createKey() {
+          loading.create = true;
+          error.value = '';
+          message.value = '';
+          try {
+            const payload = {
+              remark: createForm.remark,
+              totalQuotaTokens: createForm.totalQuotaTokens,
+              expiresAt: createForm.expiresAt || null,
+              keyPlaintext: createForm.keyPlaintext || '',
+            };
+            const data = await api('/api/admin/keys', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+            message.value = `创建成功：${data.keyPlaintext}`;
+            createForm.remark = '';
+            createForm.keyPlaintext = '';
+            await loadKeys();
+          } catch (e) {
+            error.value = e.message;
+          } finally {
+            loading.create = false;
+          }
+        }
+
+        async function saveKey(item) {
+          error.value = '';
+          message.value = '';
+          try {
+            await api(`/api/admin/keys/${item.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                remark: item.remark,
+                totalQuotaTokens: item.totalQuotaTokens,
+                expiresAt: item.expiresAt || null,
+                keyPlaintext: item.keyPlaintext
+              })
+            });
+            message.value = '保存成功';
+            await loadKeys();
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
+        async function toggleKey(item, disabled) {
+          error.value = '';
+          message.value = '';
+          try {
+            await api(`/api/admin/keys/${item.id}/${disabled ? 'disable' : 'enable'}`, { method: 'POST', body: '{}' });
+            message.value = disabled ? '已禁用' : '已启用';
+            await loadKeys();
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
+        async function removeKey(item) {
+          if (!confirm(`确认删除 Key: ${item.keyPlaintext} ?`)) return;
+          error.value = '';
+          message.value = '';
+          try {
+            await api(`/api/admin/keys/${item.id}`, { method: 'DELETE' });
+            message.value = '删除成功';
+            await loadKeys();
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
+        async function loadAnnouncements() {
+          announcements.value = await api('/api/admin/announcements');
+        }
+
+        async function createAnnouncement() {
+          error.value = '';
+          message.value = '';
+          try {
+            if (!announcementForm.title || !announcementForm.contentMd) {
+              throw new Error('请输入标题和内容');
+            }
+            await api('/api/admin/announcements', {
+              method: 'POST',
+              body: JSON.stringify(announcementForm)
+            });
+            message.value = '公告创建成功';
+            announcementForm.title = '';
+            announcementForm.contentMd = '';
+            await loadAnnouncements();
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
+        async function publishAnnouncement(item) {
+          error.value = '';
+          message.value = '';
+          try {
+            await api(`/api/admin/announcements/${item.id}/publish`, {
+              method: 'POST',
+              body: '{}'
+            });
+            message.value = '发布成功';
+            await loadAnnouncements();
+          } catch (e) {
+            error.value = e.message;
+          }
+        }
+
+        async function loadAuditLogs() {
+          auditLogs.value = await api('/api/admin/audit?limit=100');
+        }
+
+        async function refreshAll() {
+          error.value = '';
+          message.value = '';
+          await Promise.all([loadKeys(), loadAnnouncements(), loadAuditLogs()]);
+        }
+
+        function logout() {
+          localStorage.removeItem('cliproxy_admin_token');
+          location.href = '/admin/login';
+        }
+
+        onMounted(refreshAll);
+
+        return {
+          error,
+          message,
+          loading,
+          query,
+          pagination,
+          keys,
+          announcements,
+          auditLogs,
+          remoteReachable,
+          createForm,
+          announcementForm,
+          statusText,
+          syncText,
+          actionText,
+          formatDateTime,
+          loadKeys,
+          createKey,
+          saveKey,
+          toggleKey,
+          removeKey,
+          createAnnouncement,
+          publishAnnouncement,
+          refreshAll,
+          logout
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

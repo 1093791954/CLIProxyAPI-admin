@@ -1,4 +1,6 @@
-/target
-/.env
-/data/*.db
-/data/*.db-*
+node_modules/
+.env
+data/
+backups/
+npm-debug.log*
+.DS_Store

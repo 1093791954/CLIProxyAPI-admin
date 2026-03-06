@@ -1,0 +1,16 @@
+[Unit]
+Description=CLIProxy Key Admin Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/workspace/cliproxy-key-admin
+EnvironmentFile=/home/ubuntu/workspace/cliproxy-key-admin/.env
+ExecStart=/usr/bin/node /home/ubuntu/workspace/cliproxy-key-admin/src/server.js
+Restart=always
+RestartSec=3
+User=ubuntu
+Group=ubuntu
+
+[Install]
+WantedBy=multi-user.target

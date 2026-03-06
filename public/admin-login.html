@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLIProxy Key 管理后台登录</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app" class="page-wrap" style="max-width:560px; padding-top:56px;">
+    <div class="card">
+      <h1>CLIProxy Key 管理后台</h1>
+      <p class="small">使用管理秘钥登录</p>
+
+      <div v-if="error" class="notice error" style="margin-bottom:12px;">{{ error }}</div>
+
+      <div class="grid" style="margin-top:12px;">
+        <label>
+          管理秘钥
+          <input v-model="form.accessKey" type="password" placeholder="请输入管理秘钥" @keyup.enter="submit" />
+        </label>
+      </div>
+
+      <div style="margin-top:16px; display:flex; gap:10px;">
+        <button class="btn-primary" @click="submit" :disabled="loading">{{ loading ? '登录中...' : '登录' }}</button>
+        <a class="btn-ghost" href="/check" style="text-decoration:none; display:inline-block;">前往查询页</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, reactive, ref } = Vue;
+
+    createApp({
+      setup() {
+        const loading = ref(false);
+        const error = ref('');
+        const form = reactive({ accessKey: '' });
+
+        async function submit() {
+          loading.value = true;
+          error.value = '';
+          try {
+            const res = await fetch('/api/admin/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(form)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || '登录失败');
+            if (!data.accessToken) throw new Error('登录返回异常');
+
+            localStorage.setItem('cliproxy_admin_token', data.accessToken);
+            location.href = '/admin';
+          } catch (e) {
+            error.value = e.message || '登录失败';
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        return { form, loading, error, submit };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

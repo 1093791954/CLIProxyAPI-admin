@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLIProxy Key 查询</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+</head>
+<body>
+  <div id="app" class="page-wrap" style="max-width:860px;">
+    <div class="card">
+      <h1>Key 状态与额度查询</h1>
+      <p class="small">输入 Key 查询存活状态、额度和公告。</p>
+
+      <div class="grid two" style="margin-top:10px;">
+        <input v-model.trim="keyInput" placeholder="请输入你的 Key" @keyup.enter="check" />
+        <button class="btn-primary" @click="check" :disabled="loading">{{ loading ? '查询中...' : '立即查询' }}</button>
+      </div>
+
+      <div class="small" style="margin-top:10px;">系统已启用访问保护，频繁查询可能短时返回繁忙提示。</div>
+      <div v-if="error" class="notice error" style="margin-top:10px;">{{ error }}</div>
+    </div>
+
+    <div v-if="result" class="card">
+      <h2>查询结果</h2>
+      <div class="grid three">
+        <div><strong>存活:</strong> {{ result.alive ? '是' : '否' }}</div>
+        <div><strong>状态:</strong> <span class="badge" :class="result.status">{{ statusText(result.status) }}</span></div>
+        <div><strong>同步状态:</strong> {{ syncText(result.syncStatus) }}</div>
+        <div><strong>总额:</strong> {{ result.quotaUnlimited ? '不限额' : result.totalQuotaTokens }}</div>
+        <div><strong>已用:</strong> {{ result.usedTokens ?? '-' }}</div>
+        <div><strong>剩余:</strong> {{ result.quotaUnlimited ? '不限额' : result.remainingTokens }}</div>
+        <div><strong>到期时间:</strong> {{ result.expiresAt || '无' }}</div>
+        <div><strong>远端存在:</strong> {{ result.remoteExists ? '是' : '否' }}</div>
+        <div><strong>查询时间:</strong> {{ checkedAt }}</div>
+      </div>
+    </div>
+
+    <div class="card" v-if="announcement">
+      <h2>公告：{{ announcement.title }}</h2>
+      <div class="announcement-md" v-html="renderAnnouncementMd(announcement.contentMd)"></div>
+      <div class="small announcement-meta">版本：V{{ announcement.version }} · 发布人：{{ announcement.createdBy || '-' }} · 发布时间：{{ formatDateTime(announcement.createdAt) }}</div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref } = Vue;
+
+    createApp({
+      setup() {
+        const keyInput = ref('');
+        const loading = ref(false);
+        const error = ref('');
+        const result = ref(null);
+        const announcement = ref(null);
+        const checkedAt = ref('');
+
+        const statusMap = {
+          active: '启用',
+          disabled: '禁用',
+          exhausted: '已耗尽',
+          deleted: '已删除',
+          missing: '不存在'
+        };
+
+        const syncStatusMap = {
+          ok: '正常',
+          missing_remote: '远端缺失',
+          disabled: '已禁用',
+          exhausted: '已耗尽',
+          deleted: '已删除',
+          pending: '待同步'
+        };
+
+        function statusText(status) {
+          return statusMap[status] || '未知';
+        }
+
+        function syncText(syncStatus) {
+          if (!syncStatus) return '-';
+          return syncStatusMap[syncStatus] || '未知';
+        }
+
+        function formatDateTime(iso) {
+          if (!iso) return '-';
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return String(iso);
+          const parts = new Intl.DateTimeFormat('zh-CN', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).formatToParts(d);
+          const map = Object.fromEntries(parts.map((item) => [item.type, item.value]));
+          return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
+        }
+
+        function renderAnnouncementMd(md) {
+          const source = String(md || '');
+          if (!source.trim()) return '';
+          const html = window.marked
+            ? window.marked.parse(source, { gfm: true, breaks: true })
+            : source;
+          return window.DOMPurify ? window.DOMPurify.sanitize(html) : html;
+        }
+
+        async function check() {
+          error.value = '';
+          result.value = null;
+          if (!keyInput.value) {
+            error.value = '请输入 Key';
+            return;
+          }
+
+          loading.value = true;
+          try {
+            const res = await fetch('/api/public/key/check', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: keyInput.value })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              throw new Error(data.error || data.message || '查询失败');
+            }
+
+            result.value = data;
+            announcement.value = data.announcement || null;
+            checkedAt.value = formatDateTime(new Date().toISOString());
+          } catch (e) {
+            error.value = e.message || '查询失败';
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        return {
+          keyInput,
+          loading,
+          error,
+          result,
+          checkedAt,
+          announcement,
+          statusText,
+          syncText,
+          formatDateTime,
+          renderAnnouncementMd,
+          check
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

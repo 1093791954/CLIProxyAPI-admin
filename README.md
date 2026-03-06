@@ -1,102 +1,39 @@
-# CLIProxyAPI-admin
+# CLIProxy Key Admin
 
-Rust 实现的本地管理服务，提供：
+Independent key management site for CLIProxyAPI.
 
-- API Key 创建 / 列表 / 编辑 / 停用 / 启用 / 删除
-- Key Token 总量限额（累计）与自动停用
-- OpenAI v1 前置网关（转发到 `CLIProxyAPI`）
-- 管理页面（SSR）
-- SQLite 本地轻量数据库
+- Single access-key login for admin (no username/password)
+- Key create / update / disable / delete / query
+- Local quota management with remote usage sync
+- Auto-disable by removing key from CLIProxy when quota exhausted
+- Announcement management
+- Audit logs
+- Public key check page
 
-## 运行
+## Requirements
 
-1. 复制环境变量模板
+- Node.js 20+
+- SQLite
+- Reachable CLIProxyAPI management endpoint
 
-```bash
-copy .env.example .env
-```
-
-2. 设置 `.env`（至少要改 `UPSTREAM_BEARER_KEY`）
-
-```env
-BIND_ADDR=127.0.0.1:8318
-DATABASE_URL=sqlite://./data/admin.db
-UPSTREAM_BASE_URL=http://localhost:8317
-UPSTREAM_BEARER_KEY=replace-with-your-upstream-key
-ADMIN_USERNAME=adminops
-ADMIN_PASSWORD=ChangeMe_To_A_Strong_2026!
-RUST_LOG=info
-```
-
-3. 启动
+## Start
 
 ```bash
-cargo run
+cp .env.example .env
+npm ci
+npm run db:migrate
+npm start
 ```
 
-4. 访问
+Pages:
 
-- 管理页：`http://127.0.0.1:8318/admin`
-- 健康检查：`http://127.0.0.1:8318/health`
+- Public check page: `/check`
+- Admin login page: `/admin/login`
 
-## 对外接口
+## Important Env
 
-### 管理 API
-
-- `POST /admin/api/keys`
-- `GET /admin/api/keys`
-- `PATCH /admin/api/keys/{id}`
-- `DELETE /admin/api/keys/{id}`
-- `POST /admin/api/keys/{id}/disable`
-- `POST /admin/api/keys/{id}/enable`
-- `POST /admin/api/keys/{id}/reset-usage`
-- `GET /admin/api/keys/{id}/usage-events`
-
-### 前置网关
-
-- `GET /v1/models`
-- `POST /v1/chat/completions`
-- `POST /v1/completions`
-- `POST /v1/responses`
-
-说明：
-- 客户端请求 `Authorization: Bearer <admin_key>`
-- 服务端转发到 `UPSTREAM_BASE_URL`，并替换为固定上游 `UPSTREAM_BEARER_KEY`
-- `GET /v1/responses`（WebSocket）当前返回 `501`
-
-## 使用 jshook-reverse 调试管理页面
-
-先手动启动 Chrome 调试端口：
-
-```bash
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
-```
-
-然后在技能目录执行：
-
-```bash
-node dist/skill.js browser launch
-node dist/skill.js page goto http://127.0.0.1:8318/admin
-node dist/skill.js debugger enable
-node dist/skill.js hook generate fetch */admin/api/*
-node dist/skill.js hook-data
-```
-
-## Release Startup Notes
-
-- Static assets are now embedded in the binary, so `/assets/style.css` works even when starting from `target/release`.
-- `.env` is still loaded from the current working directory only.
-
-Example:
-
-```bash
-cd D:\claude code Tools\CLIProxyAPI-admin
-target\release\CLIProxyAPI-admin.exe
-```
-
-## Admin Basic Auth
-
-- `/admin` and `/admin/api/*` now require HTTP Basic authentication.
-- Credentials come from `.env`: `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
-- Startup will fail if username/password are missing or weak.
-- `/health` remains public for health checks.
+- `ADMIN_ACCESS_KEY`: admin login secret
+- `CLIPROXY_BASE_URL`: e.g. `http://127.0.0.1:8317`
+- `CLIPROXY_MANAGEMENT_KEY`: CLIProxy management key
+- `PUBLIC_RATE_LIMIT_MAX`: public check limit per minute
+- `SYNC_INTERVAL_MS`: usage sync interval (ms)
