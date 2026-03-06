@@ -4,3 +4,5 @@ data/
 backups/
 npm-debug.log*
 .DS_Store
+.playwright-cli/
+output/
